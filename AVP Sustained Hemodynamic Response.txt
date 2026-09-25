@@ -1,0 +1,217 @@
+--Calculating norepinephrine equivalent dose using the VASST definition: https://www.nejm.org/doi/full/10.1056/NEJMoa067373
+
+
+CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.ned_data AS
+
+WITH analytic_sample AS (
+    SELECT DISTINCT stay_id
+    FROM mimic-iv-ext-2025.avp.analytic_sample
+),
+
+norepi AS (
+    SELECT
+        stay_id,
+        starttime,
+        endtime,
+        CASE
+            WHEN rateuom = 'mg/kg/min' AND patientweight = 1 THEN rate
+            WHEN rateuom = 'mg/kg/min' THEN rate * 1000
+            ELSE rate
+        END AS vaso_rate
+    FROM `physionet-data.mimiciv_3_1_icu.inputevents`
+    WHERE itemid = 221906
+      AND stay_id IN (SELECT stay_id FROM analytic_sample)
+),
+
+epi AS (
+    SELECT
+        stay_id,
+        starttime,
+        endtime,
+        rate AS vaso_rate
+    FROM `physionet-data.mimiciv_3_1_icu.inputevents`
+    WHERE itemid IN (221289,229617)
+      AND stay_id IN (SELECT stay_id FROM analytic_sample)
+),
+
+dop AS (
+    SELECT
+        stay_id,
+        starttime,
+        endtime,
+        rate AS vaso_rate
+    FROM `physionet-data.mimiciv_3_1_icu.inputevents`
+    WHERE itemid = 221662
+      AND stay_id IN (SELECT stay_id FROM analytic_sample)
+),
+
+pe AS (
+    SELECT
+        stay_id,
+        starttime,
+        endtime,
+        CASE
+            WHEN rateuom = 'mcg/min' THEN rate/patientweight
+            ELSE rate
+        END AS vaso_rate
+    FROM `physionet-data.mimiciv_3_1_icu.inputevents`
+    WHERE itemid IN (221749,229630,229631,229632)
+      AND stay_id IN (SELECT stay_id FROM analytic_sample)
+),
+
+tm AS (
+    SELECT stay_id, starttime AS vasotime FROM norepi
+    UNION DISTINCT
+    SELECT stay_id, endtime   AS vasotime FROM norepi
+    UNION DISTINCT
+    SELECT stay_id, starttime AS vasotime FROM epi
+    UNION DISTINCT
+    SELECT stay_id, endtime   AS vasotime FROM epi
+    UNION DISTINCT
+    SELECT stay_id, starttime AS vasotime FROM dop
+    UNION DISTINCT
+    SELECT stay_id, endtime   AS vasotime FROM dop
+    UNION DISTINCT
+    SELECT stay_id, starttime AS vasotime FROM pe
+    UNION DISTINCT
+    SELECT stay_id, endtime   AS vasotime FROM pe
+),
+
+tm_lag AS (
+    SELECT
+        stay_id,
+        vasotime AS starttime,
+        LEAD(vasotime) OVER (
+            PARTITION BY stay_id
+            ORDER BY vasotime
+        ) AS endtime
+    FROM tm
+),
+
+vasoactive_agent AS (
+    SELECT
+        t.stay_id,
+        t.starttime,
+        t.endtime,
+        dop.vaso_rate AS dopamine,
+        epi.vaso_rate AS epinephrine,
+        nor.vaso_rate AS norepinephrine,
+        pe.vaso_rate AS phenylephrine
+    FROM tm_lag t
+
+    LEFT JOIN dop
+        ON t.stay_id = dop.stay_id
+        AND t.starttime >= dop.starttime
+        AND t.endtime <= dop.endtime
+
+    LEFT JOIN epi
+        ON t.stay_id = epi.stay_id
+        AND t.starttime >= epi.starttime
+        AND t.endtime <= epi.endtime
+
+    LEFT JOIN norepi nor
+        ON t.stay_id = nor.stay_id
+        AND t.starttime >= nor.starttime
+        AND t.endtime <= nor.endtime
+
+    LEFT JOIN pe
+        ON t.stay_id = pe.stay_id
+        AND t.starttime >= pe.starttime
+        AND t.endtime <= pe.endtime
+
+    WHERE t.endtime IS NOT NULL
+)
+
+SELECT
+    stay_id,
+    starttime,
+    endtime,
+    ROUND(
+        CAST(
+            COALESCE(norepinephrine,0)
+            + COALESCE(epinephrine,0)
+            + COALESCE(phenylephrine/10,0)
+            + COALESCE(dopamine/2,0)
+            AS NUMERIC
+        ),
+        4
+    ) AS norepinephrine_equivalent_dose
+FROM vasoactive_agent
+WHERE norepinephrine IS NOT NULL
+   OR epinephrine IS NOT NULL
+   OR phenylephrine IS NOT NULL
+   OR dopamine IS NOT NULL;
+
+
+
+
+
+--Determining if each subject achieved sustained hemodynamic response, defined as:
+--1) Decrease in NED from NED at AVP start
+--2) MAP 65+ 
+--3) Both conditions met for at least 6 hours straight
+
+
+
+WITH candidate_starts AS (
+
+SELECT
+    a.stay_id,
+    a.time0,
+    m.charttime AS response_start,
+    n.norepinephrine_equivalent_dose AS response_ned,
+    a.neqdoseatavp_kg
+FROM mimic-iv-ext-2025.avp.analytic_sample a
+JOIN mimic-iv-ext-2025.avp.map_data m
+    ON a.stay_id = m.stay_id
+JOIN mimic-iv-ext-2025.avp.ned_data n
+    ON m.stay_id = n.stay_id
+   AND m.charttime >= n.starttime
+   AND m.charttime < n.endtime
+WHERE
+    m.charttime >= a.time0
+    AND m.map >= 65
+    AND n.norepinephrine_equivalent_dose < a.neqdoseatavp_kg
+),
+
+valid_windows AS (
+
+SELECT
+    c.*
+    FROM candidate_starts c
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM mimic-iv-ext-2025.avp.map_data m
+    JOIN mimic-iv-ext-2025.avp.ned_data n
+      ON m.stay_id = n.stay_id
+     AND m.charttime >= n.starttime
+     AND m.charttime < n.endtime
+
+    WHERE
+          m.stay_id = c.stay_id
+      AND m.charttime > c.response_start
+      AND m.charttime <= TIMESTAMP_ADD(
+            c.response_start,
+            INTERVAL 6 HOUR
+          )
+      AND (
+             m.map < 65
+          OR n.norepinephrine_equivalent_dose > c.response_ned
+      )
+
+)
+
+)
+
+SELECT
+stay_id,
+MIN(response_start) AS start_sustained_hds_response,
+FROM valid_windows
+GROUP BY stay_id;
+
+
+
+
+
+
+
