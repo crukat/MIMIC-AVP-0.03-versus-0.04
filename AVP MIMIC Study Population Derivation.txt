@@ -1229,13 +1229,157 @@ albuminemar <- emar %>% filter(grepl("albumin", medication, ignore.case = TRUE))
                   
                   
                   #Bringing in derived norepinephrine equivalent dose table from MIMIC#
+                  #Modified to use VASST definition#
                   
-                  bq_auth ()
+                bq_auth ()
                   project <- "mimic-iv-ext-2025"
-                  sql <- "SELECT i.subject_id, i.hadm_id, n.*
-                            FROM physionet-data.mimiciv_3_1_derived.norepinephrine_equivalent_dose n
-                              LEFT JOIN physionet-data.mimiciv_3_1_icu.icustays i
-                                 ON n.stay_id = i.stay_id;" 
+                  sql <- "WITH
+
+norepi AS (
+    SELECT
+        stay_id,
+        hadm_id,
+        subject_id,
+        starttime,
+        endtime,
+        CASE
+            WHEN rateuom = 'mg/kg/min' AND patientweight = 1 THEN rate
+            WHEN rateuom = 'mg/kg/min' THEN rate * 1000
+            ELSE rate
+        END AS vaso_rate
+    FROM `physionet-data.mimiciv_3_1_icu.inputevents`
+    WHERE itemid = 221906
+),
+
+epi AS (
+    SELECT
+        stay_id,
+        hadm_id,
+        subject_id,
+        starttime,
+        endtime,
+        rate AS vaso_rate
+    FROM `physionet-data.mimiciv_3_1_icu.inputevents`
+    WHERE itemid IN (221289,229617)
+),
+
+dop AS (
+    SELECT
+        stay_id,
+        hadm_id,
+        subject_id,
+        starttime,
+        endtime,
+        rate AS vaso_rate
+    FROM `physionet-data.mimiciv_3_1_icu.inputevents`
+    WHERE itemid = 221662
+),
+
+pe AS (
+    SELECT
+        stay_id,
+        hadm_id,
+        subject_id,
+        starttime,
+        endtime,
+        CASE
+            WHEN rateuom = 'mcg/min' THEN rate/patientweight
+            ELSE rate
+        END AS vaso_rate
+    FROM `physionet-data.mimiciv_3_1_icu.inputevents`
+    WHERE itemid IN (221749,229630,229631,229632)
+),
+
+tm AS (
+    SELECT stay_id,subject_id, hadm_id, starttime AS vasotime FROM norepi
+    UNION DISTINCT
+    SELECT stay_id,subject_id, hadm_id, endtime   AS vasotime FROM norepi
+    UNION DISTINCT
+    SELECT stay_id,subject_id, hadm_id, starttime AS vasotime FROM epi
+    UNION DISTINCT
+    SELECT stay_id,subject_id, hadm_id, endtime   AS vasotime FROM epi
+    UNION DISTINCT
+    SELECT stay_id,subject_id, hadm_id, starttime AS vasotime FROM dop
+    UNION DISTINCT
+    SELECT stay_id,subject_id, hadm_id, endtime   AS vasotime FROM dop
+    UNION DISTINCT
+    SELECT stay_id,subject_id, hadm_id, starttime AS vasotime FROM pe
+    UNION DISTINCT
+    SELECT stay_id,subject_id, hadm_id, endtime   AS vasotime FROM pe
+),
+
+tm_lag AS (
+    SELECT
+        stay_id,
+        subject_id,
+        hadm_id,
+        vasotime AS starttime,
+        LEAD(vasotime) OVER (
+            PARTITION BY stay_id
+            ORDER BY vasotime
+        ) AS endtime
+    FROM tm
+),
+
+vasoactive_agent AS (
+    SELECT
+        t.stay_id,
+        t.hadm_id,
+        t.subject_id,
+        t.starttime,
+        t.endtime,
+        dop.vaso_rate AS dopamine,
+        epi.vaso_rate AS epinephrine,
+        nor.vaso_rate AS norepinephrine,
+        pe.vaso_rate AS phenylephrine
+    FROM tm_lag t
+
+    LEFT JOIN dop
+        ON t.stay_id = dop.stay_id
+        AND t.starttime >= dop.starttime
+        AND t.endtime <= dop.endtime
+
+    LEFT JOIN epi
+        ON t.stay_id = epi.stay_id
+        AND t.starttime >= epi.starttime
+        AND t.endtime <= epi.endtime
+
+    LEFT JOIN norepi nor
+        ON t.stay_id = nor.stay_id
+        AND t.starttime >= nor.starttime
+        AND t.endtime <= nor.endtime
+
+    LEFT JOIN pe
+        ON t.stay_id = pe.stay_id
+        AND t.starttime >= pe.starttime
+        AND t.endtime <= pe.endtime
+
+    WHERE t.endtime IS NOT NULL
+)
+
+SELECT
+    stay_id,
+    subject_id,
+    hadm_id,
+    starttime,
+    endtime,
+    ROUND(
+        CAST(
+            COALESCE(norepinephrine,0)
+            + COALESCE(epinephrine,0)
+            + COALESCE(phenylephrine/10,0)
+            + COALESCE(dopamine/2,0)
+            AS NUMERIC
+        ),
+        4
+    ) AS norepinephrine_equivalent_dose
+FROM vasoactive_agent
+WHERE norepinephrine IS NOT NULL
+   OR epinephrine IS NOT NULL
+   OR phenylephrine IS NOT NULL
+   OR dopamine IS NOT NULL;
+
+" 
                   
                   job <- bq_project_query(project, sql)
                   ned_mimic <- bq_table_download(job)
