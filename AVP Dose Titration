@@ -1,4 +1,5 @@
 
+
 --Determining what proportion of subjects experienced vasopressin dose titration following initiation--
 
 --Pulling all vasopressin data for our analytic sample--
@@ -36,7 +37,7 @@ MAX(v.vaso_rate) AS max_dose_3h,
 MIN(v.vaso_rate) AS min_dose_3h,
     CASE
         WHEN a.avpstartdose_hfhs= '0.03 units/min' AND MIN(v.vaso_rate) < 0.025 THEN 1
-        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.035 THEN 1  
+        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.036 THEN 1  
         ELSE 0
     END AS dose_decrease_below_bound_3h
 FROM mimic-iv-ext-2025.avp.avp_titration a
@@ -68,7 +69,7 @@ MAX(v.vaso_rate) AS max_dose_6h,
 MIN(v.vaso_rate) AS min_dose_6h,
     CASE
         WHEN a.avpstartdose_hfhs= '0.03 units/min' AND MIN(v.vaso_rate) < 0.025 THEN 1
-        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.035 THEN 1  
+        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.036 THEN 1  
         ELSE 0
     END AS dose_decrease_below_bound_6h
 FROM mimic-iv-ext-2025.avp.avp_titration a
@@ -99,7 +100,7 @@ MAX(v.vaso_rate) AS max_dose_12h,
 MIN(v.vaso_rate) AS min_dose_12h,
     CASE
         WHEN a.avpstartdose_hfhs= '0.03 units/min' AND MIN(v.vaso_rate) < 0.025 THEN 1
-        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.035 THEN 1  
+        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.036 THEN 1  
         ELSE 0
     END AS dose_decrease_below_bound_12h
 FROM mimic-iv-ext-2025.avp.avp_titration a
@@ -130,7 +131,7 @@ MAX(v.vaso_rate) AS max_dose_24h,
 MIN(v.vaso_rate) AS min_dose_24h,
     CASE
         WHEN a.avpstartdose_hfhs= '0.03 units/min' AND MIN(v.vaso_rate) < 0.025 THEN 1
-        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.035 THEN 1  
+        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.036 THEN 1  
         ELSE 0
     END AS dose_decrease_below_bound_24h
 FROM mimic-iv-ext-2025.avp.avp_titration a
@@ -160,5 +161,4 @@ SELECT h3.stay_id, h3.max_dose_3h, h3.dose_increased_above_bound_3h, h3.min_dose
 
 SELECT *
 FROM mimic-iv-ext-2025.avp.avp_titration_upper_lower_bounds;
-
 
