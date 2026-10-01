@@ -1,3 +1,4 @@
+
 --Determining what proportion of subjects experienced vasopressin dose titration following initiation--
 
 --Pulling all vasopressin data for our analytic sample--
@@ -19,7 +20,7 @@ WHERE i.itemid = 222315 AND i.stay_id IN (
 
 
 
---Scanning the first 3 hours for each subject to determine if there was an increase in vasopressin dose above the upper bound for their cohort--
+--Scanning the first 3 hours for each subject to determine if there was a titration in vasopressin dose above or below the upper/lower bound for their cohort--
 
 CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_3h AS
 SELECT
@@ -31,7 +32,13 @@ MAX(v.vaso_rate) AS max_dose_3h,
         WHEN a.avpstartdose_hfhs = '0.03 units/min' AND MAX(v.vaso_rate) > 0.035  THEN 1
         WHEN a.avpstartdose_hfhs = '0.04 units/min' AND MAX(v.vaso_rate) > 0.045 THEN 1 
         ELSE 0
-    END AS dose_increased_above_bound_3h
+    END AS dose_increased_above_bound_3h,
+MIN(v.vaso_rate) AS min_dose_3h,
+    CASE
+        WHEN a.avpstartdose_hfhs= '0.03 units/min' AND MIN(v.vaso_rate) < 0.025 THEN 1
+        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.035 THEN 1  
+        ELSE 0
+    END AS dose_decrease_below_bound_3h
 FROM mimic-iv-ext-2025.avp.avp_titration a
     LEFT JOIN mimic-iv-ext-2025.avp.vasopressin v
     ON a.stay_id = v.stay_id
@@ -45,7 +52,7 @@ GROUP BY
 
 
 
---Scanning the first 6 hours for each subject to determine if there was an increase in vasopressin dose above the upper bound for their cohort--
+--Scanning the first 6 hours for each subject to determine if there was a titration in vasopressin dose above or below the upper/lower bound for their cohort--
 
 CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_6h AS
 SELECT
@@ -57,7 +64,13 @@ MAX(v.vaso_rate) AS max_dose_6h,
         WHEN a.avpstartdose_hfhs = '0.03 units/min' AND MAX(v.vaso_rate) > 0.035  THEN 1
         WHEN a.avpstartdose_hfhs = '0.04 units/min' AND MAX(v.vaso_rate) > 0.045 THEN 1 
         ELSE 0
-    END AS dose_increased_above_bound_6h
+    END AS dose_increased_above_bound_6h,
+MIN(v.vaso_rate) AS min_dose_6h,
+    CASE
+        WHEN a.avpstartdose_hfhs= '0.03 units/min' AND MIN(v.vaso_rate) < 0.025 THEN 1
+        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.035 THEN 1  
+        ELSE 0
+    END AS dose_decrease_below_bound_6h
 FROM mimic-iv-ext-2025.avp.avp_titration a
     LEFT JOIN mimic-iv-ext-2025.avp.vasopressin v
     ON a.stay_id = v.stay_id
@@ -70,7 +83,7 @@ GROUP BY
 
 
 
---Scanning the first 12 hours for each subject to determine if there was an increase in vasopressin dose above the upper bound for their cohort--
+--Scanning the first 12 hours for each subject to determine if there was a titration in vasopressin dose above or below the upper/lower bound for their cohort--
 
 CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_12h AS
 SELECT
@@ -82,7 +95,13 @@ MAX(v.vaso_rate) AS max_dose_12h,
         WHEN a.avpstartdose_hfhs = '0.03 units/min' AND MAX(v.vaso_rate) > 0.035  THEN 1
         WHEN a.avpstartdose_hfhs = '0.04 units/min' AND MAX(v.vaso_rate) > 0.045 THEN 1 
         ELSE 0
-    END AS dose_increased_above_bound_12h
+    END AS dose_increased_above_bound_12h,
+MIN(v.vaso_rate) AS min_dose_12h,
+    CASE
+        WHEN a.avpstartdose_hfhs= '0.03 units/min' AND MIN(v.vaso_rate) < 0.025 THEN 1
+        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.035 THEN 1  
+        ELSE 0
+    END AS dose_decrease_below_bound_12h
 FROM mimic-iv-ext-2025.avp.avp_titration a
     LEFT JOIN mimic-iv-ext-2025.avp.vasopressin v
     ON a.stay_id = v.stay_id
@@ -95,7 +114,7 @@ GROUP BY
     
 
 
---Scanning the first 24 hours for each subject to determine if there was an increase in vasopressin dose above the upper bound for their cohort--
+--Scanning the first 24 hours for each subject to determine if there was a titration in vasopressin dose above or below the upper/lower bound for their cohort--
 
 CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_24h AS
 SELECT
@@ -107,7 +126,13 @@ MAX(v.vaso_rate) AS max_dose_24h,
         WHEN a.avpstartdose_hfhs = '0.03 units/min' AND MAX(v.vaso_rate) > 0.035  THEN 1
         WHEN a.avpstartdose_hfhs = '0.04 units/min' AND MAX(v.vaso_rate) > 0.045 THEN 1 
         ELSE 0
-    END AS dose_increased_above_bound24h
+    END AS dose_increased_above_bound24h,
+MIN(v.vaso_rate) AS min_dose_24h,
+    CASE
+        WHEN a.avpstartdose_hfhs= '0.03 units/min' AND MIN(v.vaso_rate) < 0.025 THEN 1
+        WHEN a.avpstartdose_hfhs= '0.04 units/min' AND MIN(v.vaso_rate) < 0.035 THEN 1  
+        ELSE 0
+    END AS dose_decrease_below_bound_24h
 FROM mimic-iv-ext-2025.avp.avp_titration a
     LEFT JOIN mimic-iv-ext-2025.avp.vasopressin v
     ON a.stay_id = v.stay_id
@@ -122,8 +147,8 @@ GROUP BY
 --Merging all titration variables into one table--
 --Hadm_id 29568899 has NULL values for max dose(got assigned a new stay_id - unsure why- so this code will not pick up vasopresin titration). Manually verified that no titration occurred. 
 
-CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_above_upper_bound AS
-SELECT h3.stay_id, h3.max_dose_3h, h3.dose_increased_above_bound_3h, h6.max_dose_6h, h6.dose_increased_above_bound_6h, h12.max_dose_12h, h12.dose_increased_above_bound_12h, h24.max_dose_24h, h24.dose_increased_above_bound24h
+CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_upper_lower_bounds AS
+SELECT h3.stay_id, h3.max_dose_3h, h3.dose_increased_above_bound_3h, h3.min_dose_3h, h3.dose_decrease_below_bound_3h, h6.max_dose_6h, h6.dose_increased_above_bound_6h, h6.min_dose_6h, h6.dose_decrease_below_bound_6h, h12.max_dose_12h, h12.dose_increased_above_bound_12h, h12.min_dose_12h, h12.dose_decrease_below_bound_12h, h24.max_dose_24h, h24.dose_increased_above_bound24h, h24.min_dose_24h, h24.dose_decrease_below_bound_24h
     FROM mimic-iv-ext-2025.avp.avp_titration_3h h3
         LEFT JOIN mimic-iv-ext-2025.avp.avp_titration_6h h6
             ON h3.stay_id = h6.stay_id
@@ -134,4 +159,6 @@ SELECT h3.stay_id, h3.max_dose_3h, h3.dose_increased_above_bound_3h, h6.max_dose
 
 
 SELECT *
-FROM mimic-iv-ext-2025.avp.avp_titration_above_upper_bound;
+FROM mimic-iv-ext-2025.avp.avp_titration_upper_lower_bounds;
+
+
