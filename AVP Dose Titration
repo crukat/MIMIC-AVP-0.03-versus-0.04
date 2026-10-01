@@ -1,0 +1,137 @@
+--Determining what proportion of subjects experienced vasopressin dose titration following initiation--
+
+--Pulling all vasopressin data for our analytic sample--
+--Created table (avp_titration) that has stay_id, time0, avpstartdose, and avpstartdose cohort (0.03 or 0.04 units/min) for our analytic sample--
+
+
+CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.vasopressin AS
+SELECT
+    i.stay_id, i.linkorderid
+    , CASE WHEN i.rateuom = 'units/hour' THEN i.rate / 60.0
+        ELSE i.rate END AS vaso_rate
+    , i.amount AS vaso_amount
+    , i.starttime
+    , i.endtime
+FROM physionet-data.mimiciv_3_1_icu.inputevents i
+WHERE i.itemid = 222315 AND i.stay_id IN (
+    SELECT DISTINCT a.stay_id
+      FROM mimic-iv-ext-2025.avp.avp_titration a);
+
+
+
+--Scanning the first 3 hours for each subject to determine if there was an increase in vasopressin dose above the upper bound for their cohort--
+
+CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_3h AS
+SELECT
+a.stay_id,
+a.time0,
+a.avpstartdose_hfhs,
+MAX(v.vaso_rate) AS max_dose_3h,
+    CASE
+        WHEN a.avpstartdose_hfhs = '0.03 units/min' AND MAX(v.vaso_rate) > 0.035  THEN 1
+        WHEN a.avpstartdose_hfhs = '0.04 units/min' AND MAX(v.vaso_rate) > 0.045 THEN 1 
+        ELSE 0
+    END AS dose_increased_above_bound_3h
+FROM mimic-iv-ext-2025.avp.avp_titration a
+    LEFT JOIN mimic-iv-ext-2025.avp.vasopressin v
+    ON a.stay_id = v.stay_id
+    AND v.starttime >= a.time0
+AND v.starttime <= TIMESTAMP_ADD(a.time0, INTERVAL 3 HOUR)
+GROUP BY
+    a.stay_id,
+    a.time0,
+    a.avpstartdose_hfhs;
+
+
+
+
+--Scanning the first 6 hours for each subject to determine if there was an increase in vasopressin dose above the upper bound for their cohort--
+
+CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_6h AS
+SELECT
+a.stay_id,
+a.time0,
+a.avpstartdose_hfhs,
+MAX(v.vaso_rate) AS max_dose_6h,
+    CASE
+        WHEN a.avpstartdose_hfhs = '0.03 units/min' AND MAX(v.vaso_rate) > 0.035  THEN 1
+        WHEN a.avpstartdose_hfhs = '0.04 units/min' AND MAX(v.vaso_rate) > 0.045 THEN 1 
+        ELSE 0
+    END AS dose_increased_above_bound_6h
+FROM mimic-iv-ext-2025.avp.avp_titration a
+    LEFT JOIN mimic-iv-ext-2025.avp.vasopressin v
+    ON a.stay_id = v.stay_id
+    AND v.starttime >= a.time0
+AND v.starttime <= TIMESTAMP_ADD(a.time0, INTERVAL 6 HOUR)
+GROUP BY
+    a.stay_id,
+    a.time0,
+    a.avpstartdose_hfhs;
+
+
+
+--Scanning the first 12 hours for each subject to determine if there was an increase in vasopressin dose above the upper bound for their cohort--
+
+CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_12h AS
+SELECT
+a.stay_id,
+a.time0,
+a.avpstartdose_hfhs,
+MAX(v.vaso_rate) AS max_dose_12h,
+    CASE
+        WHEN a.avpstartdose_hfhs = '0.03 units/min' AND MAX(v.vaso_rate) > 0.035  THEN 1
+        WHEN a.avpstartdose_hfhs = '0.04 units/min' AND MAX(v.vaso_rate) > 0.045 THEN 1 
+        ELSE 0
+    END AS dose_increased_above_bound_12h
+FROM mimic-iv-ext-2025.avp.avp_titration a
+    LEFT JOIN mimic-iv-ext-2025.avp.vasopressin v
+    ON a.stay_id = v.stay_id
+    AND v.starttime >= a.time0
+AND v.starttime <= TIMESTAMP_ADD(a.time0, INTERVAL 12 HOUR)
+GROUP BY
+    a.stay_id,
+    a.time0,
+    a.avpstartdose_hfhs;
+    
+
+
+--Scanning the first 24 hours for each subject to determine if there was an increase in vasopressin dose above the upper bound for their cohort--
+
+CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_24h AS
+SELECT
+a.stay_id,
+a.time0,
+a.avpstartdose_hfhs,
+MAX(v.vaso_rate) AS max_dose_24h,
+    CASE
+        WHEN a.avpstartdose_hfhs = '0.03 units/min' AND MAX(v.vaso_rate) > 0.035  THEN 1
+        WHEN a.avpstartdose_hfhs = '0.04 units/min' AND MAX(v.vaso_rate) > 0.045 THEN 1 
+        ELSE 0
+    END AS dose_increased_above_bound24h
+FROM mimic-iv-ext-2025.avp.avp_titration a
+    LEFT JOIN mimic-iv-ext-2025.avp.vasopressin v
+    ON a.stay_id = v.stay_id
+    AND v.starttime >= a.time0
+AND v.starttime <= TIMESTAMP_ADD(a.time0, INTERVAL 24 HOUR)
+GROUP BY
+    a.stay_id,
+    a.time0,
+    a.avpstartdose_hfhs;
+
+
+--Merging all titration variables into one table--
+--Hadm_id 29568899 has NULL values for max dose(got assigned a new stay_id - unsure why- so this code will not pick up vasopresin titration). Manually verified that no titration occurred. 
+
+CREATE OR REPLACE TABLE mimic-iv-ext-2025.avp.avp_titration_above_upper_bound AS
+SELECT h3.stay_id, h3.max_dose_3h, h3.dose_increased_above_bound_3h, h6.max_dose_6h, h6.dose_increased_above_bound_6h, h12.max_dose_12h, h12.dose_increased_above_bound_12h, h24.max_dose_24h, h24.dose_increased_above_bound24h
+    FROM mimic-iv-ext-2025.avp.avp_titration_3h h3
+        LEFT JOIN mimic-iv-ext-2025.avp.avp_titration_6h h6
+            ON h3.stay_id = h6.stay_id
+                LEFT JOIN mimic-iv-ext-2025.avp.avp_titration_12h h12
+                    ON h6.stay_id = h12.stay_id
+                        LEFT JOIN mimic-iv-ext-2025.avp.avp_titration_24h h24
+                            ON h12.stay_id = h24.stay_id;
+
+
+SELECT *
+FROM mimic-iv-ext-2025.avp.avp_titration_above_upper_bound;
